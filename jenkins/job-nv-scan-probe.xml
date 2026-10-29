@@ -1,10 +1,11 @@
 <?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job">
-  <description>Probe: scan a Docker Hub image with the NeuVector plugin (report only, no threshold). Used to pick the vulnerable base image.</description>
+  <description>Probe: run the same NeuVector scan step and High + Critical gate as the main pipeline against an existing Docker Hub tag, without promoting or touching deploy/. HIGH_THRESHOLD 0 = report only.</description>
   <properties>
     <hudson.model.ParametersDefinitionProperty><parameterDefinitions>
       <hudson.model.StringParameterDefinition><name>REPOSITORY</name><defaultValue>library/alpine</defaultValue></hudson.model.StringParameterDefinition>
       <hudson.model.StringParameterDefinition><name>TAG</name><defaultValue>3.14.0</defaultValue></hudson.model.StringParameterDefinition>
+      <hudson.model.StringParameterDefinition><name>HIGH_THRESHOLD</name><defaultValue>0</defaultValue></hudson.model.StringParameterDefinition>
     </parameterDefinitions></hudson.model.ParametersDefinitionProperty>
   </properties>
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
@@ -14,7 +15,19 @@
     stage('NeuVector scan') {
       steps {
         neuvector controllerEndpointUrlSelection: 'nv-home-lab', registrySelection: 'dockerhub',
-                  repository: params.REPOSITORY, tag: params.TAG, scanTimeout: 10
+                  repository: params.REPOSITORY, tag: params.TAG, scanTimeout: 10,
+                  numberOfHighSeverityToFail: params.HIGH_THRESHOLD
+        sh '''
+          report=$(ls -t NeuVectorReport_${JOB_BASE_NAME}_${BUILD_NUMBER}-*.json | head -1)
+          high=$(jq '[.report.vulnerabilities[] | select(.severity == "High")] | length' "$report")
+          critical=$(jq '[.report.vulnerabilities[] | select(.severity == "Critical")] | length' "$report")
+          echo "NeuVector gate: High $high + Critical $critical = $((high + critical)), threshold $HIGH_THRESHOLD"
+          echo "NeuVector report digest: $(jq -r .report.digest "$report")"
+          if [ "$HIGH_THRESHOLD" -gt 0 ] &amp;&amp; [ $((high + critical)) -ge "$HIGH_THRESHOLD" ]; then
+            echo "NeuVector gate: FAILED, High + Critical is at or above the threshold"
+            exit 1
+          fi
+        '''
       }
     }
   }
