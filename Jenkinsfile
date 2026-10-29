@@ -35,7 +35,7 @@ pipeline {
         sh '''
           docker buildx create --name "$BUILDER" --driver docker-container >/dev/null
           docker buildx build --builder "$BUILDER" --platform linux/amd64,linux/arm64 \
-            --build-arg BASE_IMAGE="$BASE_IMAGE" --build-arg VERSION="$APP_VERSION" \
+            --provenance=false --sbom=false --build-arg BASE_IMAGE="$BASE_IMAGE" --build-arg VERSION="$APP_VERSION" \
             -t "$IMAGE:$CANDIDATE" app
         '''
       }
@@ -46,13 +46,13 @@ pipeline {
           sh '''
             printenv DH_TOKEN | docker login -u "$DH_USER" --password-stdin docker.io >/dev/null
             docker buildx build --builder "$BUILDER" --platform linux/amd64,linux/arm64 \
-              --build-arg BASE_IMAGE="$BASE_IMAGE" --build-arg VERSION="$APP_VERSION" \
+              --provenance=false --sbom=false --build-arg BASE_IMAGE="$BASE_IMAGE" --build-arg VERSION="$APP_VERSION" \
               -t "$IMAGE:$CANDIDATE" --push app
           '''
         }
         script {
           env.CANDIDATE_DIGEST = sh(returnStdout: true,
-            script: 'docker buildx imagetools inspect "$IMAGE:$CANDIDATE" --format "{{json .Manifest}}" | sed -n \'s/.*"digest":"\\(sha256:[0-9a-f]*\\)".*/\\1/p\' | head -1').trim()
+            script: 'docker buildx imagetools inspect "$IMAGE:$CANDIDATE" --format "{{json .Manifest}}" | jq -r .digest').trim()
         }
         echo "Pushed ${env.IMAGE}:${env.CANDIDATE} (${env.CANDIDATE_DIGEST})"
       }
