@@ -1,0 +1,8 @@
+neuvector-vulnerability-scanner:2.10
+configuration-as-code
+workflow-aggregator
+git
+credentials-binding
+pipeline-graph-view
+pipeline-stage-view
+timestamper
