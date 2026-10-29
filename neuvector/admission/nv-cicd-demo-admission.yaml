@@ -1,0 +1,47 @@
+# NeuVector admission control rules for the demo, all scoped to namespace nv-demo.
+# NeuVector 5.6.2 only imports a cluster-scoped NvAdmissionControlSecurityRule named "local";
+# the demo prefix is carried in each rule's comment. No spec.config here: enabling admission
+# control and Monitor/Protect are set in the NeuVector console, not by this file.
+# Criterion names and operators: neuvector/neuvector v5.6.2 share/criteria.go.
+apiVersion: neuvector.com/v1
+kind: NvAdmissionControlSecurityRule
+metadata:
+  name: local
+spec:
+  rules:
+    - action: deny
+      comment: "nv-cicd-demo a1: image registry is not Docker Hub"
+      criteria:
+        - name: namespace
+          op: containsAny
+          value: nv-demo
+        - name: imageRegistry
+          op: notContainsAny
+          value: docker.io
+    - action: deny
+      comment: "nv-cicd-demo a2: image repository is not yansheng133/nv-cicd-demo"
+      criteria:
+        - name: namespace
+          op: containsAny
+          value: nv-demo
+        - name: image
+          op: notContainsAny
+          value: yansheng133/nv-cicd-demo
+    - action: deny
+      comment: "nv-cicd-demo b: image has not been scanned"
+      criteria:
+        - name: namespace
+          op: containsAny
+          value: nv-demo
+        - name: imageScanned
+          op: "="
+          value: "false"
+    - action: deny
+      comment: "nv-cicd-demo c: high (incl. critical) CVE count >= HIGH_THRESHOLD (1)"
+      criteria:
+        - name: namespace
+          op: containsAny
+          value: nv-demo
+        - name: cveHighCount
+          op: ">="
+          value: "1"
