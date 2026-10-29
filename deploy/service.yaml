@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nv-cicd-demo
+  labels:
+    app: nv-cicd-demo
+spec:
+  selector:
+    app: nv-cicd-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
