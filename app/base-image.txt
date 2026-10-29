@@ -1,1 +1,1 @@
-alpine:3.14.0
+registry.suse.com/bci/bci-micro:16.0
