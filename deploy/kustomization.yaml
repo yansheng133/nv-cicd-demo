@@ -7,4 +7,4 @@ resources:
   - service.yaml
 images:
   - name: docker.io/yansheng133/nv-cicd-demo
-    newTag: 1.0.3
+    newTag: 1.0.6
