@@ -22,6 +22,9 @@ pipeline {
     // per-build Docker config inside the workspace; nothing is left in the Jenkins home
     DOCKER_CONFIG = "${env.WORKSPACE}/.docker"
     BUILDER       = "nv-cicd-demo-${env.BUILD_NUMBER}"
+    // NeuVector controller REST API (reverse tunnel on the EC2) and the registry T-B configured for this repo
+    NV_API        = 'https://127.0.0.1:10443'
+    NV_REGISTRY   = 'nv-cicd-demo'
   }
   stages {
     stage('Build') {
@@ -86,6 +89,31 @@ pipeline {
           docker buildx imagetools create -t "$IMAGE:$APP_VERSION" "$IMAGE@$CANDIDATE_DIGEST"
           docker buildx imagetools inspect "$IMAGE:$APP_VERSION" | grep -E '^(Name|Digest)|Platform: *linux/(amd64|arm64)'
         '''
+      }
+    }
+    stage('Wait for registry scan') {
+      steps {
+        // The cluster's admission rule "Image scanned" looks at NeuVector's registry scan, not at the CI scan above.
+        // Periodic registry scans are off (Docker Hub anonymous pull limit), so start one for the new tag and
+        // wait until it has a finished result before Argo CD can deploy it.
+        withCredentials([string(credentialsId: 'neuvector-apikey', variable: 'NV_KEY')]) {
+          sh '''
+            code=$(printf 'X-Auth-Apikey: %s\\n' "$NV_KEY" | curl -sk --max-time 15 -o /dev/null -w '%{http_code}' -H @- \
+              -X POST "$NV_API/v1/scan/registry/$NV_REGISTRY/scan")
+            echo "Start registry scan of $NV_REGISTRY: HTTP $code"
+            [ "$code" = "200" ] || exit 1
+            for i in $(seq 1 40); do
+              status=$(printf 'X-Auth-Apikey: %s\\n' "$NV_KEY" | curl -sk --max-time 15 -H @- \
+                "$NV_API/v1/scan/registry/$NV_REGISTRY/images" \
+                | jq -r --arg tag "$APP_VERSION" '[.images[]? | select(.tag == $tag) | .status] | first // "not listed"')
+              echo "Registry scan of $NV_REPOSITORY:$APP_VERSION: $status"
+              [ "$status" = "finished" ] && exit 0
+              sleep 15
+            done
+            echo "Registry scan did not finish within 10 minutes; not updating the GitOps repo"
+            exit 1
+          '''
+        }
       }
     }
     stage('Update GitOps repo') {
